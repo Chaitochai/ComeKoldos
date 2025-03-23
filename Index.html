@@ -36,9 +36,21 @@
             background-color: #e6e600;
         }
     
+#mobileControls {
+    display: flex;
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+}
+
 @media (min-width: 768px) {
     #mobileControls {
-        display: none !important;
+        display: none;
     }
 }
 
@@ -646,7 +658,7 @@ function setMobileDirection(direction) {
 </script>
 
 <!-- Controles móviles -->
-<div id="mobileControls" style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px;">
+<div id="mobileControls">
     <button onclick="setMobileDirection('ArrowUp')" style="width: 60px; height: 60px;">⬆️</button>
     <div style="display: flex; gap: 10px;">
         <button onclick="setMobileDirection('ArrowLeft')" style="width: 60px; height: 60px;">⬅️</button>
