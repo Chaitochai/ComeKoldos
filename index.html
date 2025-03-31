@@ -1,623 +1,325 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Pac-Man con Laberinto Complejo</title>
-    <style>
-        canvas {
-            border: 1px solid black;
-        }
-        .game-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: #000;
-        }
-        #score {
-            color: white;
-            font-size: 24px;
-            font-family: Arial, sans-serif;
-            margin-bottom: 10px;
-        }
-        #restartButton {
-            display: none;
-            margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #ff0;
-            border: none;
-            border-radius: 5px;
-        }
-        #restartButton:hover {
-            background-color: #e6e600;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Comecocos Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: black;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      background-color: black;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: 60px 60px 60px;
+      grid-template-rows: 60px 60px;
+      gap: 10px;
+      z-index: 10;
+    }
+    .btn {
+      width: 60px;
+      height: 60px;
+      background-color: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: white;
+      user-select: none;
+      touch-action: none;
+    }
+    .blank {
+      visibility: hidden;
+    }
+    #score, #lives {
+      position: fixed;
+      top: 10px;
+      color: white;
+      font-size: 20px;
+      font-family: Arial, sans-serif;
+    }
+    #score { left: 10px; }
+    #lives { right: 10px; }
+  </style>
 </head>
 <body>
-    <div class="game-container">
-        <div id="score">Puntuación: 0</div>
-        <canvas id="gameCanvas" width="400" height="400"></canvas>
-        <button id="restartButton" onclick="restartGame()">Reiniciar Juego</button>
-    </div>
+  <canvas id="gameCanvas" width="480" height="168"></canvas>
+  <div class="controls">
+    <div class="blank"></div>
+    <div class="btn" id="btn-up">⬆️</div>
+    <div class="blank"></div>
+    <div class="btn" id="btn-left">⬅️</div>
+    <div class="btn" id="btn-down">⬇️</div>
+    <div class="btn" id="btn-right">➡️</div>
+  </div>
+  <div id="score">Score: 0</div>
+  <div id="lives">Lives: 3</div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const scoreDisplay = document.getElementById('score');
-        const restartButton = document.getElementById('restartButton');
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const tileSize = 24;
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3,1],
+      [1,0,1,1,1,0,1,1,0,1,0,1,1,0,1,1,1,0,0,1],
+      [1,3,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,1],
+      [1,0,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,3,1],
+      [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+    const rows = map.length;
+    const cols = map[0].length;
 
-        // Cargar imágenes de los fantasmas
-        const ghostImages = [
-            new Image(),
-            new Image(),
-            new Image(),
-            new Image()
-        ];
-        ghostImages[0].src = 'pedro.png'; // Imagen para Pedro
-        ghostImages[1].src = 'montero.png'; // Imagen para Montero
-        ghostImages[2].src = 'avalos.png'; // Imagen para Avalos
-        ghostImages[3].src = 'koldo.png'; // Imagen para Koldo
+    const player = {
+      x: 1,
+      y: 1,
+      dir: 'right',
+      nextDir: 'right',
+      mouthOpen: true
+    };
 
-        // Cargar sonidos
-        const munchSound = new Audio('munch.wav'); // Sonido al comer un coco
-        const powerUpSound = new Audio('powerup.wav'); // Sonido al comer un power-up
-        const eatGhostSound = new Audio('eatghost.wav'); // Sonido al comer un fantasma
-        const gameOverSound = new Audio('gameover.wav'); // Sonido al perder
+    // Cargar imágenes de los fantasmas con los nombres especificados
+    const ghostImages = [
+      new Image(),
+      new Image(),
+      new Image(),
+      new Image()
+    ];
+    ghostImages[0].src = "avalos.png"; // Primera imagen
+    ghostImages[1].src = "koldo.png"; // Segunda imagen
+    ghostImages[2].src = "montero.png"; // Tercera imagen
+    ghostImages[3].src = "pedro.png"; // Cuarta imagen
 
-        // Pac-Man
-        let pacman = {
-            x: 1 * 26.67 + 13.33, // maze[1][1] -> (40, 40) cambiado a maze[1][2] -> (66.67, 40)
-            y: 1 * 26.67 + 13.33,
-            radius: 13.33,
-            mouthAngle: 0,
-            direction: 0,
-            speed: 2,
-            moving: false,
-            poweredUp: false,
-            powerUpTimer: 0,
-            lastDirection: null
-        };
+    const ghosts = [
+      { x: 9, y: 3, dir: "left", vulnerable: false, image: ghostImages[0], loaded: false },
+      { x: 10, y: 3, dir: "right", vulnerable: false, image: ghostImages[1], loaded: false },
+      { x: 9, y: 4, dir: "up", vulnerable: false, image: ghostImages[2], loaded: false },
+      { x: 10, y: 4, dir: "down", vulnerable: false, image: ghostImages[3], loaded: false }
+    ];
 
-        // Calcular tileSize para posicionar los fantasmas
-        const mazeWidth = 15; // Número de columnas en el laberinto
-        const tileSize = canvas.width / mazeWidth; // 400 / 15 ≈ 26.67
-        const centerOffset = tileSize / 2;
+    let score = 0;
+    let lives = 3;
+    let gameOver = false;
+    let powerMode = false;
+    let powerTimer = 0;
+    let frameCount = 0;
+    const playerSpeed = 10;
+    const ghostSpeed = 12;
 
-        // Fantasmas
-        let ghosts = [
-            { x: 1 * tileSize + centerOffset, y: 1 * tileSize + centerOffset, speed: 1, dx: 1, dy: 0, vulnerable: false, image: ghostImages[0], lastPos: null, stuckCounter: 0, name: 'Pedro', backupColor: 'red' }, // Pedro en maze[1][1]
-            { x: 13 * tileSize + centerOffset, y: 1 * tileSize + centerOffset, speed: 1, dx: -1, dy: 0, vulnerable: false, image: ghostImages[1], lastPos: null, stuckCounter: 0, name: 'Montero', backupColor: 'green' }, // Montero en maze[1][13]
-            { x: 1 * tileSize + centerOffset, y: 9 * tileSize + centerOffset, speed: 1, dx: 1, dy: 0, vulnerable: false, image: ghostImages[2], lastPos: null, stuckCounter: 0, name: 'Avalos', backupColor: 'purple' }, // Avalos en maze[9][1]
-            { x: 7 * tileSize + centerOffset, y: 5 * tileSize + centerOffset, speed: 1, dx: 0, dy: 1, vulnerable: false, image: ghostImages[3], lastPos: null, stuckCounter: 0, name: 'Koldo', backupColor: 'orange' } // Koldo en maze[5][7]
-        ];
+    // Marcar imágenes como cargadas cuando se carguen correctamente
+    ghosts.forEach(ghost => {
+      ghost.image.onload = () => {
+        ghost.loaded = true;
+        console.log(`Imagen cargada: ${ghost.image.src}`);
+      };
+      ghost.image.onerror = () => {
+        console.error(`Error al cargar la imagen: ${ghost.image.src}`);
+        ghost.loaded = false;
+      };
+    });
 
-        // Período de gracia para evitar colisiones iniciales (5 segundos)
-        let collisionGracePeriod = 300; // 300 frames ≈ 5 segundos a 60 FPS
-
-        // Cocos y power-ups
-        let dots = [];
-        let powerUps = [];
-        const dotRadius = 3;
-        const powerUpRadius = 8;
-        let score = 0;
-
-        let mouthOpening = true;
-        let gameOver = false;
-
-        // Laberinto más complejo con caminos más anchos (1 = pared, 0 = camino)
-        const maze = [
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-            [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        ];
-
-        // Crear los cocos y power-ups en los caminos del laberinto
-        function createDotsAndPowerUps() {
-            dots = [];
-            powerUps = [];
-            for (let row = 0; row < maze.length; row++) {
-                for (let col = 0; col < maze[row].length; col++) {
-                    if (maze[row][col] === 0) {
-                        const x = col * tileSize + tileSize / 2;
-                        const y = row * tileSize + tileSize / 2;
-                        if ((row === 1 && col === 1) || (row === 1 && col === 13) ||
-                            (row === 9 && col === 1) || (row === 9 && col === 13)) {
-                            powerUps.push({ x, y });
-                        } else {
-                            dots.push({ x, y });
-                        }
-                    }
-                }
-            }
-        }
-
-        function drawMaze() {
-            console.log("Dibujando el laberinto...");
-            for (let row = 0; row < maze.length; row++) {
-                for (let col = 0; col < maze[row].length; col++) {
-                    if (maze[row][col] === 1) {
-                        ctx.fillStyle = 'blue';
-                        ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
-                    }
-                }
-            }
-        }
-
-        function drawPacman() {
-            console.log(`Dibujando Pac-Man en (${pacman.x.toFixed(2)}, ${pacman.y.toFixed(2)})`);
-            ctx.globalAlpha = 1.0;
+    function drawMap() {
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          ctx.fillStyle = map[row][col] === 1 ? "blue" : "black";
+          ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
+          if (map[row][col] === 0) {
+            ctx.fillStyle = "white";
             ctx.beginPath();
-            const startAngle = pacman.direction + pacman.mouthAngle * Math.PI;
-            const endAngle = pacman.direction + (2 - pacman.mouthAngle) * Math.PI;
-            ctx.arc(pacman.x, pacman.y, pacman.radius, startAngle, endAngle);
-            ctx.lineTo(pacman.x, pacman.y);
-            ctx.fillStyle = 'yellow';
+            ctx.arc(col * tileSize + tileSize / 2, row * tileSize + tileSize / 2, 3, 0, Math.PI * 2);
             ctx.fill();
-            ctx.closePath();
+          } else if (map[row][col] === 3) {
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(col * tileSize + tileSize / 2, row * tileSize + tileSize / 2, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
+      }
+    }
 
-        function animateMouth() {
-            if (!pacman.moving) {
-                pacman.mouthAngle = 0;
-                return;
-            }
-            if (mouthOpening) {
-                pacman.mouthAngle += 0.05;
-                if (pacman.mouthAngle >= 0.2) mouthOpening = false;
-            } else {
-                pacman.mouthAngle -= 0.05;
-                if (pacman.mouthAngle <= 0) mouthOpening = true;
-            }
+    function drawPlayer() {
+      ctx.fillStyle = "yellow";
+      let angleStart = player.mouthOpen ? 0.2 * Math.PI : 0.4 * Math.PI;
+      let angleEnd = player.mouthOpen ? 1.8 * Math.PI : 1.6 * Math.PI;
+      if (player.dir === 'left') {
+        angleStart = player.mouthOpen ? 1.2 * Math.PI : 1.4 * Math.PI;
+        angleEnd = player.mouthOpen ? 0.8 * Math.PI : 0.6 * Math.PI;
+      } else if (player.dir === 'up') {
+        angleStart = player.mouthOpen ? 1.7 * Math.PI : 1.9 * Math.PI;
+        angleEnd = player.mouthOpen ? 1.3 * Math.PI : 1.1 * Math.PI;
+      } else if (player.dir === 'down') {
+        angleStart = player.mouthOpen ? 0.7 * Math.PI : 0.5 * Math.PI;
+        angleEnd = player.mouthOpen ? 0.3 * Math.PI : 0.1 * Math.PI;
+      }
+      ctx.beginPath();
+      ctx.moveTo(player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
+      ctx.arc(player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2, tileSize / 2, angleStart, angleEnd);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawGhosts() {
+      ghosts.forEach(ghost => {
+        if (ghost.vulnerable) {
+          // Hacer parpadear los fantasmas vulnerables
+          if (Math.floor(frameCount / 10) % 2 === 0) {
+            // Dibujar el fantasma vulnerable en azul
+            ctx.fillStyle = "blue";
+            ctx.beginPath();
+            ctx.arc(ghost.x * tileSize + tileSize / 2, ghost.y * tileSize + tileSize / 2, tileSize / 2, 0, Math.PI * 2);
+            ctx.fillRect(ghost.x * tileSize, ghost.y * tileSize + tileSize / 2, tileSize, tileSize / 2);
+            ctx.fill();
+          } else if (ghost.loaded) {
+            // Dibujar la imagen original del fantasma
+            ctx.drawImage(ghost.image, ghost.x * tileSize, ghost.y * tileSize, tileSize, tileSize);
+          }
+        } else if (ghost.loaded) {
+          // Dibujar la imagen del fantasma si se cargó correctamente
+          ctx.drawImage(ghost.image, ghost.x * tileSize, ghost.y * tileSize, tileSize, tileSize);
+        } else {
+          // Respaldo: dibujar un círculo rojo si la imagen no se cargó
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(ghost.x * tileSize + tileSize / 2, ghost.y * tileSize + tileSize / 2, tileSize / 2, 0, Math.PI * 2);
+          ctx.fill();
         }
+      });
+    }
 
-        function checkCollision(x, y, radius) {
-            const row = Math.floor(y / tileSize);
-            const col = Math.floor(x / tileSize);
-            console.log(`Verificando colisión en (${x.toFixed(2)}, ${y.toFixed(2)}), Celda: maze[${row}][${col}]`);
+    function movePlayer() {
+      const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+      const [nx, ny] = [player.x + dirs[player.nextDir][0], player.y + dirs[player.nextDir][1]];
+      if (map[ny] && map[ny][nx] !== 1) {
+        player.dir = player.nextDir;
+      }
+      const [dx, dy] = dirs[player.dir];
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      if (map[newY] && map[newY][newX] !== 1) {
+        player.x = newX;
+        player.y = newY;
+      }
+      if (map[player.y][player.x] === 0) {
+        map[player.y][player.x] = 2;
+        score += 10;
+      } else if (map[player.y][player.x] === 3) {
+        map[player.y][player.x] = 2;
+        score += 50;
+        powerMode = true;
+        powerTimer = 300;
+        ghosts.forEach(ghost => ghost.vulnerable = true);
+      }
+      document.getElementById("score").textContent = `Score: ${score}`;
+    }
 
-            const corners = [
-                { x: x + radius, y: y },
-                { x: x - radius, y: y },
-                { x: x, y: y + radius },
-                { x: x, y: y - radius }
-            ];
-
-            for (let corner of corners) {
-                const cornerRow = Math.floor(corner.y / tileSize);
-                const cornerCol = Math.floor(corner.x / tileSize);
-                console.log(`Esquina: (${corner.x.toFixed(2)}, ${corner.y.toFixed(2)}), Celda: maze[${cornerRow}][${cornerCol}]`);
-                if (cornerRow >= 0 && cornerRow < maze.length && cornerCol >= 0 && cornerCol < maze[0].length) {
-                    if (maze[cornerRow][cornerCol] === 1) {
-                        console.log(`Colisión detectada en (${corner.x.toFixed(2)}, ${corner.y.toFixed(2)}), Celda: maze[${cornerRow}][${cornerCol}]`);
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        function movePacman() {
-            let lastKey = null;
-
-            document.addEventListener('keydown', (e) => {
-                if (gameOver) return;
-                lastKey = e.key;
-                pacman.moving = true;
-            });
-
-            document.addEventListener('keyup', (e) => {
-                if (e.key === lastKey) {
-                    pacman.moving = false;
-                }
-            });
-
-            function updatePosition() {
-                if (!pacman.moving) return;
-
-                let newX = pacman.x;
-                let newY = pacman.y;
-                let newDirection = pacman.direction;
-                let currentDirection = lastKey;
-
-                switch (lastKey) {
-                    case 'ArrowUp':
-                        newY -= pacman.speed;
-                        newDirection = Math.PI * 1.5;
-                        break;
-                    case 'ArrowDown':
-                        newY += pacman.speed;
-                        newDirection = Math.PI / 2;
-                        break;
-                    case 'ArrowLeft':
-                        newX -= pacman.speed;
-                        newDirection = Math.PI;
-                        break;
-                    case 'ArrowRight':
-                        newX += pacman.speed;
-                        newDirection = 0;
-                        break;
-                }
-
-                const isTurning = pacman.lastDirection && pacman.lastDirection !== currentDirection;
-
-                if (isTurning) {
-                    const col = Math.floor(pacman.x / tileSize);
-                    const row = Math.floor(pacman.y / tileSize);
-                    const centerX = col * tileSize + tileSize / 2;
-                    const centerY = row * tileSize + tileSize / 2;
-
-                    if ((pacman.lastDirection === 'ArrowLeft' || pacman.lastDirection === 'ArrowRight') &&
-                        (currentDirection === 'ArrowUp' || currentDirection === 'ArrowDown')) {
-                        pacman.x = centerX;
-                    } else if ((pacman.lastDirection === 'ArrowUp' || pacman.lastDirection === 'ArrowDown') &&
-                             (currentDirection === 'ArrowLeft' || currentDirection === 'ArrowRight')) {
-                        pacman.y = centerY;
-                    }
-                }
-
-                if (!checkCollision(newX, newY, pacman.radius)) {
-                    pacman.x = newX;
-                    pacman.y = newY;
-                    pacman.direction = newDirection;
-                    pacman.lastDirection = currentDirection;
-                } else {
-                    if (lastKey === 'ArrowUp' || lastKey === 'ArrowDown') {
-                        const col = Math.floor(pacman.x / tileSize);
-                        const centerX = col * tileSize + tileSize / 2;
-                        pacman.x = centerX;
-                        if (!checkCollision(newX, newY, pacman.radius)) {
-                            pacman.x = newX;
-                            pacman.y = newY;
-                            pacman.direction = newDirection;
-                            pacman.lastDirection = currentDirection;
-                        }
-                    } else if (lastKey === 'ArrowLeft' || lastKey === 'ArrowRight') {
-                        const row = Math.floor(pacman.y / tileSize);
-                        const centerY = row * tileSize + tileSize / 2;
-                        pacman.y = centerY;
-                        if (!checkCollision(newX, newY, pacman.radius)) {
-                            pacman.x = newX;
-                            pacman.y = newY;
-                            pacman.direction = newDirection;
-                            pacman.lastDirection = currentDirection;
-                        }
-                    }
-                }
-            }
-
-            setInterval(updatePosition, 1000 / 60);
-        }
-
-        function moveGhosts() {
-            ghosts.forEach(ghost => {
-                const ghostName = ghost.name;
-
-                ghost.lastPos = { x: ghost.x, y: ghost.y };
-
-                let newX = ghost.x + ghost.dx * ghost.speed;
-                let newY = ghost.y + ghost.dy * ghost.speed;
-
-                console.log(`${ghostName} - Posición actual: (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)}), Nueva posición: (${newX.toFixed(2)}, ${newY.toFixed(2)}), Dirección: (${ghost.dx}, ${ghost.dy})`);
-
-                const collision = checkCollision(newX, newY, 32 * 0.05);
-                if (!collision) {
-                    ghost.x = newX;
-                    ghost.y = newY;
-                    ghost.stuckCounter = 0;
-                    console.log(`${ghostName} se movió a (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)})`);
-                } else {
-                    console.log(`${ghostName} colisionó en (${newX.toFixed(2)}, ${newY.toFixed(2)})`);
-                    const directions = [
-                        { dx: 1, dy: 0 },
-                        { dx: -1, dy: 0 },
-                        { dx: 0, dy: 1 },
-                        { dx: 0, dy: -1 }
-                    ];
-                    let moved = false;
-                    for (let dir of directions) {
-                        newX = ghost.x + dir.dx * ghost.speed;
-                        newY = ghost.y + dir.dy * ghost.speed;
-                        if (!checkCollision(newX, newY, 32 * 0.05)) {
-                            ghost.x = newX;
-                            ghost.y = newY;
-                            ghost.dx = dir.dx;
-                            ghost.dy = dir.dy;
-                            ghost.stuckCounter = 0;
-                            console.log(`${ghostName} encontró dirección válida: (${ghost.dx}, ${ghost.dy})`);
-                            moved = true;
-                            break;
-                        }
-                    }
-                    if (!moved) {
-                        ghost.stuckCounter++;
-                        console.log(`${ghostName} sigue atascado (contador: ${ghost.stuckCounter})`);
-                    }
-                }
-
-                if (ghost.lastPos.x === ghost.x && ghost.lastPos.y === ghost.y) {
-                    ghost.stuckCounter++;
-                    if (ghost.stuckCounter > 50) {
-                        const directions = [
-                            { dx: 1, dy: 0 },
-                            { dx: -1, dy: 0 },
-                            { dx: 0, dy: 1 },
-                            { dx: 0, dy: -1 }
-                        ];
-                        const newDirection = directions[Math.floor(Math.random() * directions.length)];
-                        ghost.dx = newDirection.dx;
-                        ghost.dy = newDirection.dy;
-                        ghost.stuckCounter = 0;
-                        console.log(`${ghostName} forzó cambio de dirección a (${ghost.dx}, ${ghost.dy}) porque estaba atascado`);
-                    }
-                }
-
-                if (Math.random() < 0.05) {
-                    const directions = [
-                        { dx: 1, dy: 0 },
-                        { dx: -1, dy: 0 },
-                        { dx: 0, dy: 1 },
-                        { dx: 0, dy: -1 }
-                    ];
-                    const newDirection = directions[Math.floor(Math.random() * directions.length)];
-                    ghost.dx = newDirection.dx;
-                    ghost.dy = newDirection.dy;
-                    console.log(`${ghostName} cambió dirección aleatoriamente a (${ghost.dx}, ${ghost.dy})`);
-                }
-            });
-        }
-
-        function drawGhosts() {
-            // Depuración: Verificar el array ghosts
-            console.log(`Número de fantasmas en el array: ${ghosts.length}`);
-            ghosts.forEach(ghost => {
-                console.log(`Fantasma en array: ${ghost.name}, Posición: (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)})`);
-            });
-
-            // Dibujar todos los fantasmas
-            ghosts.forEach(ghost => {
-                const ghostName = ghost.name;
-                const backupColor = ghost.backupColor;
-
-                console.log(`Intentando dibujar ${ghostName} - Posición: (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)}), Vulnerable: ${ghost.vulnerable}`);
-
-                if (!ghost.image.complete || !ghost.image.naturalWidth) {
-                    console.error(`La imagen de ${ghostName} no está cargada correctamente. Asegúrate de que ${ghost.image.src} esté en el directorio correcto y sea un archivo PNG válido.`);
-
-                    ctx.globalAlpha = 1.0;
-                    ctx.beginPath();
-                    ctx.arc(ghost.x, ghost.y, 25, 0, Math.PI * 2);
-                    ctx.fillStyle = backupColor;
-                    ctx.fill();
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.closePath();
-
-                    console.log(`Dibujado círculo de respaldo (${backupColor}) para ${ghostName} en (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)})`);
-                } else {
-                    ctx.globalAlpha = 1.0;
-                    ctx.fillStyle = 'black';
-                    ctx.fillRect(ghost.x - 32, ghost.y - 32, 64, 64);
-
-                    ctx.globalAlpha = 1.0;
-                    if (ghost.vulnerable) {
-                        ctx.globalAlpha = 0.5;
-                    }
-                    ctx.drawImage(ghost.image, ghost.x - 32, ghost.y - 32, 64, 64);
-                    ctx.globalAlpha = 1.0;
-
-                    console.log(`${ghostName} dibujado correctamente con su imagen en (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)})`);
-                }
-            });
-        }
-
-        function drawDots() {
-            console.log("Dibujando cocos...");
-            ctx.globalAlpha = 1.0;
-            dots.forEach(dot => {
-                ctx.beginPath();
-                ctx.arc(dot.x, dot.y, dotRadius, 0, Math.PI * 2);
-                ctx.fillStyle = 'white';
-                ctx.fill();
-                ctx.closePath();
-            });
-        }
-
-        function drawPowerUps() {
-            console.log("Dibujando power-ups...");
-            ctx.globalAlpha = 1.0;
-            powerUps.forEach(powerUp => {
-                ctx.beginPath();
-                ctx.arc(powerUp.x, powerUp.y, powerUpRadius, 0, Math.PI * 2);
-                ctx.fillStyle = 'white';
-                ctx.fill();
-                ctx.closePath();
-            });
-        }
-
-        function checkCollisions() {
-            dots = dots.filter(dot => {
-                const dx = pacman.x - dot.x;
-                const dy = pacman.y - dot.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < pacman.radius + dotRadius) {
-                    score += 10;
-                    scoreDisplay.textContent = `Puntuación: ${score}`;
-                    munchSound.play();
-                    return false;
-                }
-                return true;
-            });
-
-            powerUps = powerUps.filter(powerUp => {
-                const dx = pacman.x - powerUp.x;
-                const dy = pacman.y - powerUp.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < pacman.radius + powerUpRadius) {
-                    score += 50;
-                    scoreDisplay.textContent = `Puntuación: ${score}`;
-                    powerUpSound.play();
-                    pacman.poweredUp = true;
-                    pacman.powerUpTimer = 500;
-                    ghosts.forEach(ghost => {
-                        ghost.vulnerable = true;
-                        console.log(`Power-up comido - Fantasma ${ghost.name} vulnerable: ${ghost.vulnerable}`);
-                    });
-                    return false;
-                }
-                return true;
-            });
-
-            // Solo procesar colisiones con fantasmas después del período de gracia
-            if (collisionGracePeriod <= 0) {
-                ghosts = ghosts.filter(ghost => {
-                    const dx = pacman.x - ghost.x;
-                    const dy = pacman.y - ghost.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < pacman.radius + 32) {
-                        if (pacman.poweredUp) {
-                            score += 200;
-                            scoreDisplay.textContent = `Puntuación: ${score}`;
-                            eatGhostSound.play();
-                            console.log(`Pac-Man comió a ${ghost.name} (powered up)`);
-                            return false;
-                        } else {
-                            gameOver = true;
-                            restartButton.style.display = 'block';
-                            gameOverSound.play();
-                            alert(`¡Game Over! Puntuación final: ${score}`);
-                            console.log(`Game Over - ${ghost.name} colisionó con Pac-Man`);
-                            return true;
-                        }
-                    }
-                    return true;
-                });
-            } else {
-                collisionGracePeriod--;
-                console.log(`Período de gracia activo: ${collisionGracePeriod} frames restantes`);
-            }
-
-            console.log(`Después de colisiones - Número de fantasmas: ${ghosts.length}`);
-
-            if (dots.length === 0 && powerUps.length === 0) {
-                gameOver = true;
-                restartButton.style.display = 'block';
-                alert(`¡Ganaste! Puntuación final: ${score}`);
-            }
-
-            if (pacman.poweredUp) {
-                pacman.powerUpTimer--;
-                if (pacman.powerUpTimer <= 0) {
-                    pacman.poweredUp = false;
-                    ghosts.forEach(ghost => {
-                        ghost.vulnerable = false;
-                        console.log(`Power-up terminado - Fantasma ${ghost.name} vulnerable: ${ghost.vulnerable}`);
-                    });
-                }
-            }
-        }
-
-        function restartGame() {
-            pacman = {
-                x: 1 * tileSize + centerOffset,
-                y: 2 * tileSize + centerOffset,
-                radius: 13.33,
-                mouthAngle: 0,
-                direction: 0,
-                speed: 2,
-                moving: false,
-                poweredUp: false,
-                powerUpTimer: 0,
-                lastDirection: null
-            };
-
-            ghosts = [
-                { x: 1 * tileSize + centerOffset, y: 1 * tileSize + centerOffset, speed: 1, dx: 1, dy: 0, vulnerable: false, image: ghostImages[0], lastPos: null, stuckCounter: 0, name: 'Pedro', backupColor: 'red' },
-                { x: 13 * tileSize + centerOffset, y: 1 * tileSize + centerOffset, speed: 1, dx: -1, dy: 0, vulnerable: false, image: ghostImages[1], lastPos: null, stuckCounter: 0, name: 'Montero', backupColor: 'green' },
-                { x: 1 * tileSize + centerOffset, y: 9 * tileSize + centerOffset, speed: 1, dx: 1, dy: 0, vulnerable: false, image: ghostImages[2], lastPos: null, stuckCounter: 0, name: 'Avalos', backupColor: 'purple' },
-                { x: 7 * tileSize + centerOffset, y: 5 * tileSize + centerOffset, speed: 1, dx: 0, dy: 1, vulnerable: false, image: ghostImages[3], lastPos: null, stuckCounter: 0, name: 'Koldo', backupColor: 'orange' }
-            ];
-
-            score = 0;
-            scoreDisplay.textContent = `Puntuación: ${score}`;
-            gameOver = false;
-            restartButton.style.display = 'none';
-            collisionGracePeriod = 300;
-
-            createDotsAndPowerUps();
-            movePacman();
-            update();
-        }
-
-        function update() {
-            if (gameOver) return;
-
-            console.log("Ejecutando update...");
-
-            ctx.globalAlpha = 1.0;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            drawMaze();
-            animateMouth();
-            drawPacman();
-            drawDots();
-            drawPowerUps();
-            drawGhosts();
-
-            console.log("Ejecutando moveGhosts...");
-            moveGhosts();
-
-            checkCollisions();
-            
-            requestAnimationFrame(update);
-        }
-
-        let imagesLoaded = 0;
-        ghostImages.forEach(image => {
-            image.onload = () => {
-                imagesLoaded++;
-                if (imagesLoaded === ghostImages.length) {
-                    ghosts.forEach(ghost => {
-                        const col = Math.floor(ghost.x / tileSize);
-                        const row = Math.floor(ghost.y / tileSize);
-                        console.log(`Estado inicial - ${ghost.name} - Posición: (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)}), Celda: maze[${row}][${col}] = ${maze[row][col]}`);
-                    });
-                    createDotsAndPowerUps();
-                    movePacman();
-                    setTimeout(() => {
-                        console.log("Iniciando bucle de renderizado...");
-                        update();
-                    }, 100);
-                }
-            };
-            image.onerror = () => {
-                console.error(`Error al cargar la imagen: ${image.src}. Asegúrate de que el archivo esté en el directorio correcto y sea un archivo PNG válido.`);
-                imagesLoaded++;
-                if (imagesLoaded === ghostImages.length) {
-                    ghosts.forEach(ghost => {
-                        const col = Math.floor(ghost.x / tileSize);
-                        const row = Math.floor(ghost.y / tileSize);
-                        console.log(`Estado inicial - ${ghost.name} - Posición: (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)}), Celda: maze[${row}][${col}] = ${maze[row][col]}`);
-                    });
-                    createDotsAndPowerUps();
-                    movePacman();
-                    setTimeout(() => {
-                        console.log("Iniciando bucle de renderizado...");
-                        update();
-                    }, 100);
-                }
-            };
+    function moveGhosts() {
+      ghosts.forEach(ghost => {
+        const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+        const possibleDirs = Object.keys(dirs).filter(dir => {
+          const [dx, dy] = dirs[dir];
+          const newX = ghost.x + dx;
+          const newY = ghost.y + dy;
+          return map[newY] && map[newY][newX] !== 1;
         });
-    </script>
+        if (!ghost.vulnerable && Math.random() > 0.5) {
+          ghost.dir = player.x > ghost.x ? "right" : player.x < ghost.x ? "left" : player.y > ghost.y ? "down" : "up";
+          if (!possibleDirs.includes(ghost.dir)) ghost.dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+        } else {
+          ghost.dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+        }
+        const [dx, dy] = dirs[ghost.dir];
+        ghost.x += dx;
+        ghost.y += dy;
+
+        if (ghost.x === player.x && ghost.y === player.y) {
+          if (ghost.vulnerable) {
+            ghost.x = 9; ghost.y = 3;
+            score += 200;
+            document.getElementById("score").textContent = `Score: ${score}`;
+          } else {
+            lives--;
+            document.getElementById("lives").textContent = `Lives: ${lives}`;
+            player.x = 1; player.y = 1;
+            if (lives <= 0) {
+              gameOver = true;
+              alert("Game Over! Score: " + score);
+            }
+          }
+        }
+      });
+    }
+
+    function checkWin() {
+      if (!map.some(row => row.includes(0) || row.includes(3))) {
+        gameOver = true;
+        alert("¡Ganaste! Score: " + score);
+      }
+    }
+
+    function gameLoop() {
+      if (gameOver) return;
+      frameCount++;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+
+      if (frameCount % playerSpeed === 0) {
+        movePlayer();
+      }
+
+      if (frameCount % ghostSpeed === 0) {
+        moveGhosts();
+      }
+
+      drawPlayer();
+      drawGhosts();
+      checkWin();
+
+      if (frameCount % 10 === 0) player.mouthOpen = !player.mouthOpen;
+      if (powerMode) {
+        powerTimer--;
+        if (powerTimer <= 0) {
+          powerMode = false;
+          ghosts.forEach(ghost => ghost.vulnerable = false);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.key === 'ArrowUp') player.nextDir = 'up';
+      if (e.key === 'ArrowDown') player.nextDir = 'down';
+      if (e.key === 'ArrowLeft') player.nextDir = 'left';
+      if (e.key === 'ArrowRight') player.nextDir = 'right';
+    });
+
+    document.getElementById("btn-up").addEventListener("click", () => player.nextDir = 'up');
+    document.getElementById("btn-down").addEventListener("click", () => player.nextDir = 'down');
+    document.getElementById("btn-left").addEventListener("click", () => player.nextDir = 'left');
+    document.getElementById("btn-right").addEventListener("click", () => player.nextDir = 'right');
+
+    // Iniciar el juego directamente
+    requestAnimationFrame(gameLoop);
+  </script>
 </body>
 </html>
